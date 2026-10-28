@@ -55,6 +55,11 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
+def _sql_string_literal(value: str) -> str:
+    """Quote a dataset URI as a DuckDB string literal, so a path containing ' still parses."""
+    return "'" + value.replace("'", "''") + "'"
+
+
 class SeedReaderError(DataDesignerError): ...
 
 
@@ -298,7 +303,7 @@ class SeedReader(ABC, Generic[SourceT]):
     def get_seed_dataset_size(self) -> int:
         self._ensure_attached()
         conn = self._get_duckdb_connection()
-        return conn.execute(f"SELECT COUNT(*) FROM '{self.get_dataset_uri()}'").fetchone()[0]
+        return conn.execute(f"SELECT COUNT(*) FROM {_sql_string_literal(self.get_dataset_uri())}").fetchone()[0]
 
     def create_batch_reader(
         self,
@@ -349,7 +354,7 @@ class SeedReader(ABC, Generic[SourceT]):
         """Returns the seed dataset's column names"""
         self._ensure_attached()
         conn = self._get_duckdb_connection()
-        describe_query = f"DESCRIBE SELECT * FROM '{self.get_dataset_uri()}'"
+        describe_query = f"DESCRIBE SELECT * FROM {_sql_string_literal(self.get_dataset_uri())}"
         column_descriptions = conn.execute(describe_query).fetchall()
         return [col[0] for col in column_descriptions]
 
@@ -378,12 +383,12 @@ class SeedReader(ABC, Generic[SourceT]):
             offset_value = index_range.start
             limit_value = index_range.end - index_range.start + 1
             read_query = f"""
-                SELECT * FROM '{dataset_uri}'
+                SELECT * FROM {_sql_string_literal(dataset_uri)}
                 LIMIT {limit_value} OFFSET {offset_value}
             """
             return f"SELECT * FROM ({read_query}){shuffle_query}"
 
-        return f"SELECT * FROM '{dataset_uri}'{shuffle_query}"
+        return f"SELECT * FROM {_sql_string_literal(dataset_uri)}{shuffle_query}"
 
     def get_seed_type(self) -> str:
         """Return the seed_type of the source class this reader is generic over."""

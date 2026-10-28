@@ -857,6 +857,27 @@ def test_local_file_seed_reader_uses_load_time_runtime_path_when_cwd_changes(
     assert list(df["value"]) == [1]
 
 
+@pytest.mark.parametrize("dir_name", ["o'brien", "it''s", "'quoted'"])
+def test_local_file_seed_reader_reads_path_with_single_quote(tmp_path: Path, dir_name: str) -> None:
+    seed_dir = tmp_path / dir_name
+    seed_dir.mkdir()
+    lazy.pd.DataFrame({"value": [1, 2, 3]}).to_parquet(seed_dir / "seed.parquet", index=False)
+
+    reader = LocalFileSeedReader()
+    reader.attach(LocalFileSeedSource(path=str(seed_dir / "seed.parquet")), PlaintextResolver())
+
+    assert reader.get_column_names() == ["value"]
+    assert reader.get_seed_dataset_size() == 3
+    full_df = reader.create_batch_reader(batch_size=10, index_range=None, shuffle=False).read_next_batch().to_pandas()
+    assert list(full_df["value"]) == [1, 2, 3]
+    range_df = (
+        reader.create_batch_reader(batch_size=10, index_range=IndexRange(start=1, end=2), shuffle=False)
+        .read_next_batch()
+        .to_pandas()
+    )
+    assert list(range_df["value"]) == [2, 3]
+
+
 def test_directory_seed_reader_uses_read_time_runtime_path_when_cwd_changes(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
